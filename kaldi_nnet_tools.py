@@ -86,23 +86,29 @@ def parseNNET(am_copy_path, am_info_path):
                 if 'Component' in i:
                     idx_component += 1
                     cur_feat = '<{}>'.format(i.replace(',', ''))
-                    print 'Parsing Input and Output dimensions of {}'.format(cur_feat)
+                    print 'Parsing Input and Output dimensions of {}'.format(
+                        cur_feat)
                 elif i.startswith('input-dim'):
                     print 'Updating <InputDim> on {}'.format(cur_feat)
-                    items[idx_component]['<InputDim>'] = int(i.split('=')[1].replace(',', ''))
+                    items[idx_component]['<InputDim>'] = int(
+                        i.split('=')[1].replace(',', ''))
                 elif i.startswith('output-dim'):
                     print 'Updating <OutputDim> on {}'.format(cur_feat)
-                    items[idx_component]['<OutputDim>'] = int(i.split('=')[1].replace(',', ''))
+                    items[idx_component]['<OutputDim>'] = int(
+                        i.split('=')[1].replace(',', ''))
 
     print "\nSetting shape of Linear and Bias params"
     for i in items:
         if ('Component' in i['<Name>'] and '<InputDim>' in i and '<OutputDim>' in i
                 and i['<Name>'] not in (
-                    '<NormalizeComponent>', '<PnormComponent>', '<SpliceComponent>', '<SoftmaxComponent>',
+                    '<NormalizeComponent>', '<PnormComponent>',
+                    '<SpliceComponent>', '<SoftmaxComponent>',
                     '<SumGroupComponent>')):
             print 'Param {}'.format(i['<Name>'])
-            i['<LinearParams>'] = i['<LinearParams>'].reshape(i['<InputDim>'], i['<OutputDim>'])
-            i['<BiasParams>'] = i['<BiasParams>'].reshape(1, i['<BiasParams>'].shape[0])
+            i['<LinearParams>'] = i['<LinearParams>'].reshape(
+               i['<OutputDim>'], i['<InputDim>'])
+            i['<BiasParams>'] = i['<BiasParams>'].reshape(
+                1, i['<BiasParams>'].shape[0])
 
     return items
 
@@ -119,9 +125,11 @@ def p_norm(data, size, p):
     -------
         P-Normed data
     """
-
-    output = np.power(np.sum(np.power(np.abs(np.reshape(
-            data, (data.shape[1]/size, size))), p), axis=0), 1.0/p)
+    # TODO add faster implementation
+    output = np.linalg.norm(
+        np.reshape(data, (size, data.shape[1]/size)),
+        p,
+        axis=1)
     return output.reshape(1, output.shape[0])
 
 
@@ -170,8 +178,9 @@ def sum_group(data, groups):
         Grouped data
     """
     cumsum = groups.cumsum().astype(int)
-    return np.array([np.sum(data[:, :groups[1]])] + [np.sum(data[:, p[0]:p[1]])
-                    for p in np.stack((cumsum[:-1], cumsum[1:])).T - 1])
+    return np.array([data[:, :groups[0]].sum()] + [
+            data[:, i[0]:i[1]].sum() for i in np.stack(
+                (cumsum[:-1], cumsum[1:])).T])
 
 
 def compute_linear(data, layer):
@@ -187,10 +196,26 @@ def compute_linear(data, layer):
     -------
         Linear combination
     """
-    return np.dot(data, layer['<LinearParams>']) + layer['<BiasParams>']
+    return np.dot(data, layer['<LinearParams>'].T) + layer['<BiasParams>']
 
 
-def predict(data, layers, per_layer=False, verbose=False):
+def apply_prior(data, layer):
+    """Divides the data by the priors.
+    PARAMS
+    ------
+    data : array
+        Data to apply normalization nonlinearity
+    layer : dictionary
+        Layer created with parseNNET
+    RETURNS
+    -------
+        Data divided by the priors
+    """
+    assert layer['<Name>'] == '<Priors>'
+    return data / layer['<Values>']
+
+
+def forward(data, layers, per_layer=False, verbose=True):
     """Predicts the output of the network given data
     PARAMS
     ------
@@ -208,10 +233,9 @@ def predict(data, layers, per_layer=False, verbose=False):
     output = data
     outputs = []
     for i in xrange(len(layers)):
-        if 'Component' in layers[i]['<Name>']:
-            if layers[i]['<Name>'] == '<NumComponents>':
-                continue
-            elif layers[i]['<Name>'] == '<PnormComponent>':
+        if ('Component' in layers[i]['<Name>']
+            or 'Priors' in layers[i]['<Name>']):
+            if layers[i]['<Name>'] == '<PnormComponent>':
                 output = p_norm(
                     output, layers[i]['<OutputDim>'], layers[i]['<P>'])
             elif layers[i]['<Name>'] == '<NormalizeComponent>':
@@ -220,6 +244,11 @@ def predict(data, layers, per_layer=False, verbose=False):
                 output = softmax(output)
             elif layers[i]['<Name>'] == '<SumGroupComponent>':
                 output = sum_group(output, layers[i]['<Sizes>'])
+            elif layers[i]['<Name>'] == '<Priors>':
+                if i == len(layers) - 1:
+                    output = apply_prior(output, layers[i])
+                else:
+                    raise Exception('Should only apply priors to last layer!')
             else:
                 output = compute_linear(output, layers[i])
             if verbose:
@@ -292,8 +321,8 @@ def read_kaldi_features(filepath):
 
 
 def splice(data, left_context, right_context, const_component_dim):
-    prefix = np.zeros((left_context, data.shape[1]))
-    suffix = np.tile(data[-1], (7, 1))
+    prefix = np.tile(data[0], (left_context, 1))
+    suffix = np.tile(data[-1], (right_context, 1))
     data = np.concatenate((prefix, data, suffix))
 
     i = left_context
@@ -301,7 +330,7 @@ def splice(data, left_context, right_context, const_component_dim):
         feat = data[i-left_context:i+right_context+1]
         feat = np.concatenate(
             (feat[:, :data.shape[1]-const_component_dim].ravel(),
-             feat[:, -const_component_dim:].mean(axis=0)))
+             feat[0, -const_component_dim:]))
         i += 1
         yield feat
 
@@ -328,39 +357,11 @@ def splice(data, left_context, right_context, const_component_dim):
         """
 
 
-# path where model info nnet-am-info and copy nnet-am-copy are saved
-am_copy_path = 'models/fisher_final.mdl.nnet.txt'
-am_info_path = 'models/fisher_final.mdl.info.txt'
+def save_kaldi_loglikelihoods(ll, filepath):
+    with open(filepath, "w") as text_file:
+        text_file.write('utterance-id1  [\n')
+        for i in xrange(len(ll)-1):
+            text_file.write('  {} \n'.format(' '.join(str(e) for e in ll[i])))
 
-# convert kaldi model to python
-net = parseNNET(am_copy_path, am_info_path)
-
-# read context and iVector(constant component) dimension
-left_context = abs(net[2]['<Context>'][0])
-right_context = abs(net[2]['<Context>'][-1])
-const_component_dim = net[2]['<ConstComponentDim>']
-
-"""
-# TODO : extract features from python
-wav_dump_features_path = (
-    "/Users/rafaelvalle//Desktop/kaldi/src/online2bin/online2-wav-dump-features"
-options = ("--config=/Users/rafaelvalle//Desktop/kaldi_online_fisher/"+
-    "nnet_a_gpu_online/conf/online_nnet2_dump.conf --verbose=1"
-spk2utt_rspecifier = "ark:echo utterance-id1 utterance-id1"
-wav_rspecifier = "scp:echo utterance-id1 audio/clinton1_8k.wav"
-feature_wspecifier = "ark,t:features/clinton1_8k.ark"
-
-data = extract_features(wav_dump_features_path, options, spk2utt_rspecifier,
-    wav_rspecifier, feature_wspecifier)
-"""
-
-# read kaldi features and transform them into numpy array
-feature_path = "features/clinton1_8k.ark"
-data = read_kaldi_features(feature_path)
-
-# create generator with spliced data and iVectors
-data_gen = splice(data, left_context, right_context, const_component_dim)
-
-# compute ouputs using neural network layers. first two items in list are for
-# description
-predictions = [predict(i, net[3:]) for i in data_gen]
+        text_file.write('{} ]'.format(
+            ' '.join(str(e) for e in ll[i+1])))
