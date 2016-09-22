@@ -35,10 +35,6 @@ data_gen = knt.splice(data, left_context, right_context, const_component_dim)
 
 # compute ouputs using neural network layers. first two items in list are for
 # description
-# d = data_gen.next()
-# output = knt.forward(d, net[3:], per_layer=True, verbose=True)
-
-# do not include prior layer to have results similar to kaldi's nnet-am-compute
 output = [knt.forward(i, net[3:], verbose=False) for i in data_gen]
 output = np.clip(output, 1.0e-20, np.inf)
 output = np.log(output)
