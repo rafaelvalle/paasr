@@ -38,7 +38,8 @@ data_gen = knt.splice(data, left_context, right_context, const_component_dim)
 # d = data_gen.next()
 # output = knt.forward(d, net[3:], per_layer=True, verbose=True)
 
-output = [knt.forward(i, net[3:], verbose=False) for i in data_gen]
+# do not include prior layer to have results similar to kaldi's nnet-am-compute
+output = [knt.forward(i, net[3:-1], verbose=False) for i in data_gen]
 output = np.clip(output, 1.0e-20, np.inf)
 output = np.log(output)
 knt.save_kaldi_loglikelihoods(output,
