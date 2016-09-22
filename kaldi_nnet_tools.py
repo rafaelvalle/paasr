@@ -200,7 +200,7 @@ def compute_linear(data, layer):
 
 
 def apply_prior(data, layer):
-    """Divides the data by the priors.
+    """Weights the data by the priors.
     PARAMS
     ------
     data : array
@@ -209,10 +209,13 @@ def apply_prior(data, layer):
         Layer created with parseNNET
     RETURNS
     -------
-        Data divided by the priors
+        Data weighted by the priors
     """
     assert layer['<Name>'] == '<Priors>'
-    return data / layer['<Values>']
+    # TODO confirm that weighting is done by multiplication and not division:
+    # division can produce values bigger than 1 and, therefore, positive log
+    # likelihoods
+    return data * layer['<Values>']
 
 
 def forward(data, layers, per_layer=False, verbose=True):
