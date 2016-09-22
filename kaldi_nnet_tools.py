@@ -212,10 +212,7 @@ def apply_prior(data, layer):
         Data weighted by the priors
     """
     assert layer['<Name>'] == '<Priors>'
-    # TODO confirm that weighting is done by multiplication and not division:
-    # division can produce values bigger than 1 and, therefore, positive log
-    # likelihoods
-    return data * layer['<Values>']
+    return data / layer['<Values>']
 
 
 def forward(data, layers, per_layer=False, verbose=True):
