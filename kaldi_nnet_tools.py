@@ -61,7 +61,7 @@ def parseNNET(am_copy_path, am_info_path):
     # convert lists with one item to single numbers and arrays to numpy arrays
     for i in items:
         for k in i.keys():
-            if k == '<Context>':
+            if k in('<Context>', '<Sizes>'):
                 i[k] = np.array(i[k], dtype=int)
 
             elif not isinstance(i[k], str):
@@ -177,10 +177,12 @@ def sum_group(data, groups):
     -------
         Grouped data
     """
-    cumsum = groups.cumsum().astype(int)
-    return np.array([data[:, :groups[0]].sum()] + [
-            data[:, i[0]:i[1]].sum() for i in np.stack(
-                (cumsum[:-1], cumsum[1:])).T])
+    idx_pairs = groups.cumsum().astype(int)
+    idx_pairs = np.dstack((idx_pairs[:-1], idx_pairs[1:])).flatten()
+    idx_pairs = np.insert(idx_pairs, 0, [0, idx_pairs[0]])
+    if groups[-1] == 1:
+        idx_pairs = idx_pairs[:-1]
+    return np.add.reduceat(data.T, idx_pairs)[::2].flatten()
 
 
 def compute_linear(data, layer):
@@ -233,8 +235,8 @@ def forward(data, layers, per_layer=False, verbose=True):
     output = data
     outputs = []
     for i in xrange(len(layers)):
-        if ('Component' in layers[i]['<Name>']
-            or 'Priors' in layers[i]['<Name>']):
+        if ('Component' in layers[i]['<Name>'] or
+                'Priors' in layers[i]['<Name>']):
             if layers[i]['<Name>'] == '<PnormComponent>':
                 output = p_norm(
                     output, layers[i]['<OutputDim>'], layers[i]['<P>'])
@@ -358,10 +360,5 @@ def splice(data, left_context, right_context, const_component_dim):
 
 
 def save_kaldi_loglikelihoods(ll, filepath):
-    with open(filepath, "w") as text_file:
-        text_file.write('utterance-id1  [\n')
-        for i in xrange(len(ll)-1):
-            text_file.write('  {} \n'.format(' '.join(str(e) for e in ll[i])))
-
-        text_file.write('{} ]'.format(
-            ' '.join(str(e) for e in ll[i+1])))
+    np.savetxt(filepath, ll, fmt="%10.12f", header='utterance-1d [', footer=']',
+               comments='')
