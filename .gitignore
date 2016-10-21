@@ -6,3 +6,4 @@ features/
 log_likelihoods/
 snowboy/
 .pyc
+.DS_STORE
