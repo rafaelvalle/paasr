@@ -1,2 +1,2 @@
-# ipasr
-Identity Preserving Automatic Speech Recognition
+# pasr
+Privacy Aware Automatic Speech Recognition
