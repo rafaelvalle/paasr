@@ -5,6 +5,9 @@ import lasagne
 # random seed
 rand_num_seed = 1
 
+# KEYWORD
+KEYWORD = 'HELP'
+
 # feature configuration
 LEFT_CONTEXT = 30
 RIGHT_CONTEXT = 10
@@ -12,6 +15,7 @@ FRAME_SIZE = .025  # in ms
 SAMPLE_LENGTH = (LEFT_CONTEXT + 1 + RIGHT_CONTEXT) * FRAME_SIZE
 
 # data
+text_grid_glob_str = '/Users/rafaelvalle/Desktop/speech_data/**/*.TextGrid'
 target_glob_str = '/Users/rafaelvalle/Desktop/speech_data/target_audio/help/*.npy'
 other_glob_str = '/Users/rafaelvalle/Desktop/speech_data/**/*.npy'
 file_durations_path = '/Users/rafaelvalle/Desktop/speech_data/file_duration'
@@ -22,6 +26,8 @@ RESULTS_PATH = 'results/'
 TRIAL_DIRECTORY = os.path.join(RESULTS_PATH, 'parameter_trials')
 MODEL_DIRECTORY = os.path.join(RESULTS_PATH, 'model')
 MODEL_NAME = 'model'
+TARGET_AUDIO_DIRECTORY = '/Users/rafaelvalle/Desktop/speech_data/target_audio/help/'
+
 
 # neural network structure
 nnet_params = {'n_folds': 1,
