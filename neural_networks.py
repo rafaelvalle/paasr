@@ -1,22 +1,13 @@
-""" Adaptep from Colin Raffel's git repo https://github.com/craffel/"""
 import numpy as np
 import theano
 from theano import tensor as T
 import lasagne
-import nnet_utils
 from build_kws_data import data_iterator
-import pdb
-
-def set_trace():
-    from IPython.core.debugger import Pdb
-    import sys
-    Pdb(color_scheme='Linux').set_trace(sys._getframe().f_back)
 
 
 def train(data, layers, updates_fn, batch_size=16, epoch_size=128,
           initial_patience=1000, improvement_threshold=0.99,
-          patience_increase=5, max_iter=100000):
-
+          patience_increase=5, max_iter=100000, ratio=0.5):
     # specify input and target theano data types
     input_var = T.tensor3()
     target_var = T.ivector()
@@ -52,12 +43,18 @@ def train(data, layers, updates_fn, batch_size=16, epoch_size=128,
     # compile a function to compute the validation cost and objective function
     validate_fn = theano.function(inputs=[input_var, target_var],
                                   outputs=[val_cost, val_obj_fn],
-                                  allow_input_downcast=True)    
+                                  allow_input_downcast=True)
     # create data iterators
     train_data_iterator = data_iterator(
-        data['train'][0], data['train'][1], batch_size)
+        data['train'][0], data['train'][1],
+        int(batch_size * ratio),
+        int(batch_size * (1-ratio)),
+        transpose=True)
     val_data_iterator = data_iterator(
-        data['validate'][0], data['validate'][1], 10)
+        data['validate'][0], data['validate'][1],
+        int(len(data['validate'][0])),
+        int(len(data['validate'][1])),
+        transpose=True)
 
     patience = initial_patience
     current_val_cost = np.inf
@@ -83,6 +80,9 @@ def train(data, layers, updates_fn, batch_size=16, epoch_size=128,
             epoch_result['validate_cost'] = float(cost)
             epoch_result['validate_objective'] = float(obj)
 
+            print("Training cost {}, Validation cost {}".format(
+                epoch_result['train_cost'],
+                epoch_result['validate_cost']))
             # Test whether this validate cost is the new smallest
             if epoch_result['validate_cost'] < current_val_cost:
                 # To update patience, we must be smaller than
@@ -102,8 +102,8 @@ def train(data, layers, updates_fn, batch_size=16, epoch_size=128,
             yield epoch_result
 
 
-def build_general_network(input_shape, n_layers, widths,
-                          non_linearities, drop_out=True):
+def build_general_network(input_shape, n_layers, widths, non_linearities, mean,
+                          std, drop_out=True):
     """
     Parameters
     ----------
@@ -116,7 +116,10 @@ def build_general_network(input_shape, n_layers, widths,
     # GlorotUniform is the default mechanism for initializing weights
     for i in range(n_layers):
         if i == 0:  # input layer
-            layers = lasagne.layers.InputLayer(shape=input_shape)
+            layers = lasagne.layers.standardize(
+                lasagne.layers.InputLayer(shape=input_shape),
+                mean,
+                std)
         else:  # hidden and output layers
             layers = lasagne.layers.DenseLayer(layers,
                                                num_units=widths[i],
