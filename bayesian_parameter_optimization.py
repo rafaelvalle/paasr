@@ -3,7 +3,6 @@
  """
 
 import os
-import pdb
 import numpy as np
 import lasagne
 import deepdish
@@ -15,7 +14,8 @@ import simple_spearmint
 import neural_networks
 
 
-def run_trial(targets, others, nnet_params, hyperparameter_space, train_function):
+def run_trial(targets, others, nnet_params, hyperparameter_space,
+              train_function):
     """Train a network given the task and hyperparameters and return the result.
 
     Parameters
@@ -47,22 +47,23 @@ def run_trial(targets, others, nnet_params, hyperparameter_space, train_function
     # create train and validation indices
     train_ids_t = np.random.binomial(1, .7, len(targets)).astype(bool)
     train_ids_o = np.random.binomial(1, .7, len(others)).astype(bool)
-    
-    data = {'train': [targets[train_ids_t], others[train_ids_o]], 
+    data = {'train': [targets[train_ids_t], others[train_ids_o]],
             'validate': [targets[~train_ids_t], others[~train_ids_o]]
             }
-
     # Choose network structure based on network param
     if hyperparameter_space['network'] == 'general_network':
         build_network_layers = neural_networks.build_general_network
     else:
         raise ValueError('Unknown network {}'.format(
             hyperparameter_space['network']))
+    # find more secure way to have proper shape!
     layers = build_network_layers(
-        (None, data['train'][0].shape[1], data['train'][0].shape[2]),
+        (None, data['train'][0][0].shape[1], data['train'][0][0].shape[0]),
         nnet_params['n_layers'],
         nnet_params['widths'],
         nnet_params['non_linearities'],
+        nnet_params['offset'],
+        nnet_params['scale'],
         drop_out=hyperparameter_space['dropout'])
 
     # Generate updates-creating function
@@ -109,16 +110,12 @@ def run_trial(targets, others, nnet_params, hyperparameter_space, train_function
         return best_objective, best_epoch, best_model
 
 
-def parameter_search(targets, others, nnet_params, hyperparameter_space, trial_directory,
-                     model_directory, train_function, model_name='best_model',
-                     n_models=10):
+def parameter_search(targets, others, nnet_params, hyperparameter_space,
+                     trial_directory, model_directory, train_function,
+                     model_name='best_model', n_models=10):
     """Run parameter optimization given some train function, writing out results
     Parameters
     ----------
-    data: np.ndarray
-        Matrix where rows are observations and columns are feature values.
-        Last column must be target value.
-        The data will be use to create a randomized train and validate set.
     nnet_params: dict
         Hyperparameter values that are not going to be optimized but parametrize
         the neural network.
@@ -134,7 +131,7 @@ def parameter_search(targets, others, nnet_params, hyperparameter_space, trial_d
         data, and hyperparameters to create a model.
     model_name : str
         String to be used when saving models to file
-    n_models_to_save : int
+    n_models : int
         Number of best models to save
     """
     # Create parameter trials directory if it doesn't exist
@@ -176,11 +173,10 @@ def parameter_search(targets, others, nnet_params, hyperparameter_space, trial_d
                                           "{}_{}.h5".format(model_name,
                                                             idx_max)),
                              best_model)
-        """
+
         # Also write out the entire model when the objective is the smallest
         # We don't want to write all models; they are > 100MB each
         if (not np.isnan(best_objective) and
                 best_objective == np.nanmin(ss.objective_values)):
             deepdish.io.save(
                 os.path.join(model_directory, model_name+'.h5'), best_model)
-        """
