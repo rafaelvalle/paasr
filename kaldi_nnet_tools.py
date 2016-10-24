@@ -11,11 +11,13 @@ def set_trace():
     Pdb(color_scheme='Linux').set_trace(sys._getframe().f_back)
 
 
-def parse_kaldi_features(filepath):
+def parse_kaldi_features(filepath, verbose=1):
     feats = list(open(filepath, 'r'))
+    if len(feats) == 0:
+        return feats
     feats[-1] = feats[-1][:-2]
-    data = np.array([np.array(feats[i].split(), dtype=float) 
-        for i in xrange(1, len(feats))])
+    data = np.array([np.array(feats[i].split(), dtype=float)
+                     for i in xrange(1, len(feats))])
     return data
 
 
@@ -24,9 +26,12 @@ def save_kaldi_features(filepath, verbose=True):
     folder_path = os.path.dirname(filepath)
     data = parse_kaldi_features(filepath)
     save_path = os.path.join(folder_path, filename+'.npy')
-    if verbose:
-        print "Saving {} to {}".format(filepath, save_path)
-    np.save(save_path, data)
+    if len(data) == 0:
+        print "No data in {}".format(filepath)
+    else:
+        if verbose:
+            print "Saving {} to {}".format(filepath, save_path)
+        np.save(save_path, data)
 
 
 def parseNNET(am_copy_path, am_info_path):
