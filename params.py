@@ -16,7 +16,7 @@ FRAME_SIZE = .025  # in seconds
 SAMPLE_LENGTH = (LEFT_CONTEXT + 1 + RIGHT_CONTEXT) * FRAME_SIZE
 
 # normalization
-standard_scaler_path = 'paasr/standard_scaler.npy'
+standard_scaler_path = 'standard_scaler.npy'
 
 # data
 text_grid_glob_str = '/Users/rafaelvalle/Desktop/speech_data/**/*.TextGrid'
