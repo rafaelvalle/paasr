@@ -16,13 +16,14 @@ FRAME_SIZE = .025  # in seconds
 SAMPLE_LENGTH = (LEFT_CONTEXT + 1 + RIGHT_CONTEXT) * FRAME_SIZE
 
 # normalization
-standard_scaler_path = '/Users/rafaelvalle/Desktop/paasr/standard_scaler.npy'
+standard_scaler_path = 'paasr/standard_scaler.npy'
 
 # data
 text_grid_glob_str = '/Users/rafaelvalle/Desktop/speech_data/**/*.TextGrid'
 target_glob_str = '/Users/rafaelvalle/Desktop/speech_data/target_audio/help/*.npy'
 other_glob_str = '/Users/rafaelvalle/Desktop/speech_data/**/*.npy'
 file_durations_path = '/Users/rafaelvalle/Desktop/speech_data/file_duration'
+TARGET_AUDIO_DIRECTORY = '/Users/rafaelvalle/Desktop/speech_data/target_audio/help/'
 
 # folder paths
 IMAGES_DIRECTORY = "images/"
@@ -30,7 +31,6 @@ RESULTS_PATH = 'results/'
 TRIAL_DIRECTORY = os.path.join(RESULTS_PATH, 'parameter_trials')
 MODEL_DIRECTORY = os.path.join(RESULTS_PATH, 'model')
 MODEL_NAME = 'model'
-TARGET_AUDIO_DIRECTORY = '/Users/rafaelvalle/Desktop/speech_data/target_audio/help/'
 
 
 # neural network structure
