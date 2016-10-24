@@ -128,7 +128,7 @@ send_address = '127.0.0.1', 12345
 N_ROWS = 13
 N_COLS = 98
 
-dnn_filepath = "/Users/rafaelvalle/Desktop/paasr/models/kws_model.h5"
+dnn_filepath = "models/kws_model.h5"
 pred_fn = dnn(dnn_filepath, nnet_params)
 
 # start server and client
@@ -175,4 +175,3 @@ except KeyboardInterrupt :
     print "Waiting for Server-thread to finish"
     st.join() ##!!!
     print "Done!"
-    import cPickle as pkl
