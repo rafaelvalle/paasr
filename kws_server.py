@@ -1,16 +1,20 @@
-import time, threading
+import os
 import subprocess
+import time
+import threading
 import cPickle as pkl
 import numpy as np
 import OSC
+import glob2 as glob
 import deepdish
 import theano
 from theano import tensor as T
 import lasagne
 import neural_networks
 import kaldi_nnet_tools as knt
-from params import nnet_params, standard_scaler_path
+from params import nnet_params, standard_scaler_path, KEYWORD
 import pdb
+
 
 ##############
 #   METHODS  #
@@ -75,6 +79,39 @@ def decode_audio(addr, tags, data, source):
     _decode_loglikelihoods(data[0])
 
 
+def kws_max(addr, tags, data, source):
+    """Computes class probability using a list of MFCC sent by the real-time
+    feature extractor
+    params
+    ------
+    data : array <float>
+        List of floats sent by the feature extractor
+    """
+    data = np.array(data).reshape((N_COLS, N_ROWS)).T
+    data = np.append(data, data[:, -3:]).reshape((1, 13, 101))
+
+    print(pred_fn(data))
+
+
+def kws_file(addr, tags, data, source):
+    """Computes class probability using a list of MFCC sent by the real-time
+    feature extractor
+    params
+    ------
+    data : array <float>
+        List of floats sent by the feature extractor
+    """
+    data = data[:min(len(data), 13*101)]
+    if len(data) == 13 * 101:
+        data = np.array(data).T.reshape((1, 13, 101))
+    elif len(data) > 13*101:
+        data = data[:13*101]
+    else:
+        return None
+
+    eval_prediction(data)
+
+
 def kws(addr, tags, data, source):
     """Computes class probability using a list of MFCC sent by the real-time
     feature extractor
@@ -83,9 +120,37 @@ def kws(addr, tags, data, source):
     data : array <float>
         List of floats sent by the feature extractor
     """
-    data = np.array(data).reshape((N_ROWS, N_COLS))
-    data = np.append(data, data[:, -3:]).reshape((1, 13, 101))
-    print(pred_fn(data))
+    data = data[:min(len(data), 13*101)]
+    if len(data) == 13 * 101:
+        data = np.array(data).T.reshape((1, 13, 101))
+    else:
+        data = np.array(data).reshape((N_ROWS, N_COLS))
+        data = np.append(data, data[:, -3:]).reshape((1, 13, 101))
+
+
+def eval_prediction(data):
+    label = np.argmax(pred_fn(data))
+    output = "Other"
+    if label == 1:
+        output = KEYWORD
+    print("Heard {}".format(output))
+
+
+def play_audio(filepath, verbose=False):
+    if verbose:
+        stdout = subprocess.PIPE
+    else:
+        stdout = open(os.devnull, 'w')
+
+    subprocess.call(["play", "-q", filepath], stdout=stdout)
+
+def send_filepath():
+    filepath = np.random.choice(audio_paths)
+    play_audio(filepath)
+    msg = OSC.OSCMessage()
+    msg.setAddress("/send_mfcc")
+    msg.append(filepath)
+    osc_client.send(msg)
 
 
 def dnn(dnn_filepath, nnet_params):
@@ -131,6 +196,10 @@ N_COLS = 98
 dnn_filepath = "models/kws_model.h5"
 pred_fn = dnn(dnn_filepath, nnet_params)
 
+# audio_paths_glob = "/Users/rafaelvalle/Desktop/speech_data/target_audio/help/*.wav"
+audio_paths_glob = "/Users/rafaelvalle/Desktop/paasr/*.wav"
+audio_paths = glob.glob(audio_paths_glob)
+
 # start server and client
 osc_server = OSC.OSCServer(receive_address)
 osc_server.addDefaultHandlers()
@@ -144,6 +213,8 @@ osc_server.addMsgHandler("/decode_loglikelihoods", decode_loglikelihoods)
 osc_server.addMsgHandler("/compute_loglikelihoods", compute_loglikelihoods)
 osc_server.addMsgHandler("/decode_audio", decode_audio)
 osc_server.addMsgHandler("/kws", kws)
+osc_server.addMsgHandler("/kws_max", kws_max)
+osc_server.addMsgHandler("/kws_file", kws_file)
 
 
 """
@@ -162,16 +233,18 @@ for addr in sorted(osc_server.getOSCAddressSpace()):
 
 # Start OSCServer
 print "\nStarting OSCServer. Use ctrl-C to quit."
-st = threading.Thread( target = osc_server.serve_forever )
+st = threading.Thread(target=osc_server.serve_forever)
 st.start()
 
 
-try :
-    while 1 :
-        time.sleep(5)
-except KeyboardInterrupt :
+try:
+    while 1:
+        raw_input("Press Enter to play new file...")
+        send_filepath()
+        time.sleep(1)
+except KeyboardInterrupt:
     print "\nClosing OSCServer."
     osc_server.close()
     print "Waiting for Server-thread to finish"
-    st.join() ##!!!
+    st.join()  # !!!
     print "Done!"
