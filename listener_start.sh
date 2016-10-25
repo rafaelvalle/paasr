@@ -1,2 +1,2 @@
 #!/bin/bash
-./testKaldi --config=listener.conf --verbose=1
+./listener --config=listener.conf --verbose=1
