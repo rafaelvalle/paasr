@@ -8,7 +8,7 @@ curpath=${PWD}
 
 echo "executing $0 with $1"
 ~/Desktop/kaldi/src/featbin/compute-mfcc-feats \
-    --config=/Users/rafaelvalle/Desktop/paasr/conf/mfcc.conf \
+    --config=mfcc.conf \
     --verbose=1 \
     "scp:echo $filename $filepath|" \
     "ark,t:$filedir/$filename.mfcc"
