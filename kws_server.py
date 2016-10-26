@@ -1,10 +1,13 @@
+#!/usr/bin/python
+
+import argparse
 import os
 import subprocess
 import time
 import threading
+import OSC
 import cPickle as pkl
 import numpy as np
-import OSC
 import glob2 as glob
 import deepdish
 import theano
@@ -29,7 +32,8 @@ def printing_handler(addr, tags, data, source):
 
 
 def _extract_features(filename):
-    subprocess.call("./kaldi_extract_features.sh {}".format(filename), shell=True)
+    subprocess.call("./kaldi_extract_features.sh {}".format(filename),
+                    shell=True)
 
 
 def extract_features(addr, tags, data, source):
@@ -38,7 +42,8 @@ def extract_features(addr, tags, data, source):
 
 
 def _decode_loglikelihoods(filename):
-    subprocess.call("./kaldi_decode_loglikelihoods.sh {}".format(filename), shell=True)
+    subprocess.call("./kaldi_decode_loglikelihoods.sh {}".format(filename),
+                    shell=True)
 
 
 def decode_loglikelihoods(addr, tags, data, source):
@@ -112,7 +117,7 @@ def kws_file(addr, tags, data, source):
     eval_prediction(data)
 
 
-def kws(addr, tags, data, source):
+def kws_mic(addr, tags, data, source):
     """Computes class probability using a list of MFCC sent by the real-time
     feature extractor
     params
@@ -144,6 +149,7 @@ def play_audio(filepath, verbose=False):
 
     subprocess.call(["play", "-q", filepath], stdout=stdout)
 
+
 def send_filepath():
     filepath = np.random.choice(audio_paths)
     play_audio(filepath)
@@ -172,10 +178,9 @@ def dnn(dnn_filepath, nnet_params):
     # load best network model so far
     parameters = deepdish.io.load(dnn_filepath)
 
-    # set network weights
+    # load and set network weights
     for i in xrange(len(parameters)):
         parameters[i] = parameters[i].astype('float32')
-
     lasagne.layers.set_all_param_values(network, parameters)
 
     # set up prediction function
@@ -185,66 +190,78 @@ def dnn(dnn_filepath, nnet_params):
     return theano.function([input_var], prediction)
 
 
-# define addresses
-receive_address = '127.0.0.1', 31337
-send_address = '127.0.0.1', 12345
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-m",  default=False, action='store_true',
+        help="Use Microphone audio instead of files, default False")
+    parser.add_argument(
+        "-audio_glob", default='/Users/rafaelvalle/Desktop/paasr/*.wav',
+        type=str, help="Glob string to find audio files")
+    args = parser.parse_args()
 
-# feature
-N_ROWS = 13
-N_COLS = 98
+    # define network addresses
+    receive_address = '127.0.0.1', 31337
+    send_address = '127.0.0.1', 12345
 
-dnn_filepath = "models/kws_model.h5"
-pred_fn = dnn(dnn_filepath, nnet_params)
+    # feature dimensions from listener client
+    N_ROWS = 13
+    N_COLS = 98
 
-# audio_paths_glob = "/Users/rafaelvalle/Desktop/speech_data/target_audio/help/*.wav"
-audio_paths_glob = "/Users/rafaelvalle/Desktop/paasr/*.wav"
-audio_paths = glob.glob(audio_paths_glob)
+    dnn_filepath = "models/kws_model.h5"
+    pred_fn = dnn(dnn_filepath, nnet_params)
 
-# start server and client
-osc_server = OSC.OSCServer(receive_address)
-osc_server.addDefaultHandlers()
-osc_client = OSC.OSCClient()
-osc_client.connect(send_address)
+    kws = kws_mic
+    if not args.m:
+        audio_paths_glob = args.audio_glob
+        audio_paths = glob.glob(audio_paths_glob)
+        kws = kws_file
 
-# add message handlers
-osc_server.addMsgHandler("/print_handlers", printing_handler)
-osc_server.addMsgHandler("/extract_features", extract_features)
-osc_server.addMsgHandler("/decode_loglikelihoods", decode_loglikelihoods)
-osc_server.addMsgHandler("/compute_loglikelihoods", compute_loglikelihoods)
-osc_server.addMsgHandler("/decode_audio", decode_audio)
-osc_server.addMsgHandler("/kws", kws)
-osc_server.addMsgHandler("/kws_max", kws_max)
-osc_server.addMsgHandler("/kws_file", kws_file)
+    # start server and client
+    osc_server = OSC.OSCServer(receive_address)
+    osc_server.addDefaultHandlers()
+    osc_client = OSC.OSCClient()
+    osc_client.connect(send_address)
 
+    # add message handlers
+    osc_server.addMsgHandler("/print_handlers", printing_handler)
+    osc_server.addMsgHandler("/extract_features", extract_features)
+    osc_server.addMsgHandler("/decode_loglikelihoods", decode_loglikelihoods)
+    osc_server.addMsgHandler("/compute_loglikelihoods", compute_loglikelihoods)
+    osc_server.addMsgHandler("/decode_audio", decode_audio)
+    osc_server.addMsgHandler("/kws", kws)
+    osc_server.addMsgHandler("/kws_max", kws_max)
+    osc_server.addMsgHandler("/kws_file", kws_file)
 
-"""
-print "Instantiate ANN Classifier"
-# path where model info nnet-am-info and copy nnet-am-copy are saved
-am_copy_path = 'models/fisher_final.mdl.nnet.txt'
-am_info_path = 'models/fisher_final.mdl.info.txt'
+    """
+    print "Instantiate ANN Classifier"
+    # path where model info nnet-am-info and copy nnet-am-copy are saved
+    am_copy_path = 'models/fisher_final.mdl.nnet.txt'
+    am_info_path = 'models/fisher_final.mdl.info.txt'
 
-# convert kaldi model to python
-clf = knt.parseNNET(am_copy_path, am_info_path)
-"""
-# just checking which handlers we have added
-print "Registered Callback-functions are :"
-for addr in sorted(osc_server.getOSCAddressSpace()):
-    print addr
+    # convert kaldi model to python
+    clf = knt.parseNNET(am_copy_path, am_info_path)
+    """
 
-# Start OSCServer
-print "\nStarting OSCServer. Use ctrl-C to quit."
-st = threading.Thread(target=osc_server.serve_forever)
-st.start()
+    # check which handlers we have added
+    print "Registered Callback-functions are :"
+    for addr in sorted(osc_server.getOSCAddressSpace()):
+        print addr
 
+    # Start OSCServer
+    print "\nStarting OSCServer. Use ctrl-C to quit."
+    st = threading.Thread(target=osc_server.serve_forever)
+    st.start()
 
-try:
-    while 1:
-        raw_input("Press Enter to play new file...")
-        send_filepath()
-        time.sleep(1)
-except KeyboardInterrupt:
-    print "\nClosing OSCServer."
-    osc_server.close()
-    print "Waiting for Server-thread to finish"
-    st.join()  # !!!
-    print "Done!"
+    try:
+        while 1:
+            if not args.m:
+                raw_input("Press Enter to play new file...")
+                send_filepath()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print "\nClosing OSCServer."
+        osc_server.close()
+        print "Waiting for Server-thread to finish"
+        st.join()  # !!!
+        print "Done!"
