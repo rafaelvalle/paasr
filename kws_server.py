@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from collections import deque
 import argparse
 import os
 import subprocess
@@ -107,13 +108,12 @@ def kws_file(addr, tags, data, source):
         List of floats sent by the feature extractor
     """
     data = data[:min(len(data), 13*101)]
-    if len(data) == 13 * 101:
-        data = np.array(data).T.reshape((1, 13, 101))
-    elif len(data) > 13*101:
+    if len(data) > 13*101:
         data = data[:13*101]
-    else:
-        return None
+    elif len(data) < 13*101:
+        data.extend(data[len(data)-13*101:])
 
+    data = np.array(data).T.reshape((1, 13, 101))
     eval_prediction(data)
 
 
@@ -151,12 +151,19 @@ def play_audio(filepath, verbose=False):
 
 
 def send_filepath():
-    filepath = np.random.choice(audio_paths)
+    filepath = get_next_audiopath(audio_paths)
     play_audio(filepath)
     msg = OSC.OSCMessage()
     msg.setAddress("/send_mfcc")
     msg.append(filepath)
     osc_client.send(msg)
+
+
+def get_next_audiopath(filepaths):
+    global q
+    if len(q) == 0:
+        q = deque(range(len(filepaths)))
+    return filepaths[q.pop()]
 
 
 def dnn(dnn_filepath, nnet_params):
@@ -199,6 +206,7 @@ if __name__ == '__main__':
         "-audio_glob", default='/Users/rafaelvalle/Desktop/paasr/*.wav',
         type=str, help="Glob string to find audio files")
     args = parser.parse_args()
+    print "arguments", args
 
     # define network addresses
     receive_address = '127.0.0.1', 31337
@@ -212,6 +220,7 @@ if __name__ == '__main__':
     pred_fn = dnn(dnn_filepath, nnet_params)
 
     kws = kws_mic
+    q = deque()
     if not args.m:
         audio_paths_glob = args.audio_glob
         audio_paths = glob.glob(audio_paths_glob)
